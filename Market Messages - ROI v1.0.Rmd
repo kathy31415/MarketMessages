@@ -1,0 +1,257 @@
+```{r Load required packages & create .na functions}
+requiredpackages <- c("berryFunctions", "dplyr", "lubridate", "ggsci", "pivottabler", "purrr", "readxl", "openxlsx", "tidyr", "XML", "xml2")
+
+install_load <- function(packages) {
+     for (p in packages) {
+          if (!p %in% rownames(installed.packages())) {
+               install.packages(p)
+          }
+        library(p,character.only = TRUE)
+     }
+}
+
+suppressMessages(install_load(requiredpackages))
+suppressMessages(rm(requiredpackages, install_load))
+
+PTunit <- readline(prompt = "Are you doing NI settlement? (Y/N): ")
+
+if (toupper(PTunit) == "Y" | toupper(PTunit) == "YES") {
+  PTunit <- "PT_500057"
+  MMtype <- "NIE"
+  MMtype2 <- "NI"
+} else {
+  stop("USE ROI R SCRIPT")
+}
+
+```
+
+
+
+
+```{r Master File for MMs}
+#================================================================== setup ====================================================================================
+
+# read in relevant MM csv files
+csvfile <- list.files(paste0("X:\\GeneralAccounts\\Settlement\\SEMODownloads\\", receiveddate), pattern = ".csv$|.xls$", full.names = TRUE)
+csvfile <- csvfile[grepl(x = csvfile, pattern = paste0("LCCPowerROILimited_\\d{3}LA_", mm, "_\\d{8}-\\d{8}"))]
+
+if (mm == 50 & length(csvfile) < 1) {
+  stop("No Adhoc Market Messages found. Stopping...")
+}
+
+# Open the relevant Master file
+Masterfilepath <- paste0("X:/GeneralAccounts/Settlement/", MMtype, " MM/", settype2, " ", mm, " MM/", list.files(paste0("X:/GeneralAccounts/Settlement/", MMtype, " MM/", settype2, " ", mm, " MM"), pattern = "Copy.xlsx"))
+
+if (length(Masterfilepath) > 1) {
+  stop("Close file before continuing. Stopping...")
+} else if (grepl(x = Masterfilepath, pattern = ".xlsx") == FALSE) {
+  stop("No copy of MM Master file found. Stopping...")
+} 
+
+col_types <- c("date", rep("numeric", 51))
+headings <- c("Date", "HH1","HH2","HH3","HH4","HH5","HH6","HH7","HH8","HH9","HH10","HH11","HH12","HH13","HH14","HH15","HH16","HH17","HH18","HH19","HH20","HH21","HH22","HH23","HH24","HH25","HH26","HH27","HH28","HH29","HH30","HH31","HH32","HH33","HH34","HH35","HH36","HH37","HH38","HH39","HH40","HH41","HH42","HH43","HH44","HH45","HH46","HH47","HH48","HH49","HH50", "Sum")
+cols_to_remove <- c("SRI", "GeneratorUnitID", "Type")
+
+
+#===================================================================591=====================================================================================
+# Get all of the Master file up until current settlement week
+Masterfile <- read_excel(path = Masterfilepath, sheet = 1, col_types = col_types, skip = 1)
+
+for (i in 2:ncol(Masterfile)) {
+  Masterfile[[i]] <- as.numeric(Masterfile[[i]])
+}
+
+colnames(Masterfile) <- headings
+temp <- as.Date(Masterfile$Date) # delete line?
+
+# Get Market Message csv file
+MMfile <- read.csv(csvfile[grepl(x = csvfile, pattern = "591")], skip = lineskipper)
+
+for (name in cols_to_remove) {
+  if (name %in% colnames(MMfile)) {
+    MMfile[[name]] <- NULL
+  }
+}
+
+MMfile$Date <- as.POSIXct(MMfile$Date, format = "%d/%m/%Y")
+
+if (is.error(colnames(MMfile) <- headings)) {
+  colnames(MMfile) <- headings[1:(length(headings)-1)]
+} else {
+  colnames(MMfile) <- headings
+}
+
+MMfile$Date <- as.POSIXct(MMfile$Date, format = "%d/%m/%Y")
+
+# Merge data
+Masterfile2 <- left_join(Masterfile, MMfile, by = "Date", suffix = c("_master", "_mm"))
+# Replace values in the master columns with MMfile values where they exist
+for (col in grep("_master$", names(Masterfile2), value = TRUE)) {
+  mm_col <- sub("_master$", "_mm", col)
+  Masterfile2[[col]] <- ifelse(!is.na(Masterfile2[[mm_col]]), Masterfile2[[mm_col]], Masterfile2[[col]])
+}
+Masterfile2 <- Masterfile2 %>%
+  select(-ends_with("_mm"))
+colnames(Masterfile2) <- headings
+
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype, " 591MM Messages ", settype, " - Temporary.xlsx")
+
+writexl::write_xlsx(Masterfile2, outputfile)
+#===================================================================591=====================================================================================
+
+
+
+
+#===================================================================595=====================================================================================
+# Get all of the Master file up until current settlement week
+Masterfile <- read_excel(path = Masterfilepath, sheet = 2, col_types = col_types, skip = 1)
+colnames(Masterfile) <- headings
+
+# Get Market Message csv file
+MMfile <- read.csv(csvfile[grepl(x = csvfile, pattern = "595")], skip = lineskipper)
+
+for (name in cols_to_remove) {
+  if (name %in% colnames(MMfile)) {
+    MMfile[[name]] <- NULL
+  }
+}
+
+MMfile$Date <- as.POSIXct(MMfile$Date, format = "%d/%m/%Y")
+
+# Merge data
+Masterfile2 <- left_join(Masterfile, MMfile, by = "Date", suffix = c("_master", "_mm"))
+# Replace values in the master columns with MMfile values where they exist
+for (col in grep("_master$", names(Masterfile2), value = TRUE)) {
+  mm_col <- sub("_master$", "_mm", col)
+  Masterfile2[[col]] <- ifelse(!is.na(Masterfile2[[mm_col]]), Masterfile2[[mm_col]], Masterfile2[[col]])
+}
+Masterfile2 <- Masterfile2 %>%
+  select(-ends_with("_mm"))
+colnames(Masterfile2) <- headings
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype, " 595MM Messages ", settype, " - Temporary.xlsx")
+
+writexl::write_xlsx(Masterfile2, outputfile)
+#===================================================================595=====================================================================================
+
+
+
+
+#===================================================================598=====================================================================================
+# Get all of the Master file up until current settlement week
+Masterfile <- read_excel(path = Masterfilepath, sheet = 4, col_types = col_types, skip = 1)
+colnames(Masterfile) <- headings
+
+# Get Market Message csv file
+MMfile <- read.csv(csvfile[grepl(x = csvfile, pattern = "598")], skip = lineskipper)
+
+for (name in cols_to_remove) {
+  if (name %in% colnames(MMfile)) {
+    MMfile[[name]] <- NULL
+  }
+}
+
+for (i in 2:ncol(MMfile)) {
+  MMfile[[i]] <- as.numeric(MMfile[[i]])
+}
+
+# Make own version of 598MM
+unique_dates <- seq(from = as.Date(firstday2, format = "%Y-%m-%d"), by = 1, length.out = 7)
+unique_dates <- format(unique_dates, "%d/%m/%Y")
+my598 <- data.frame(matrix(ncol = 52, nrow = 7))
+colnames(my598) <- headings
+my598$Date <- unique_dates
+
+for (i in 1:length(unique_dates)) {
+  temp <- MMfile[MMfile$Date == unique_dates[[i]],]
+  for (j in 1:50) {
+  my598[i,j+1] <- sum(temp[j+1])
+  }
+}
+
+MMfile <- my598
+MMfile$Date <- as.POSIXct(MMfile$Date, format = "%d/%m/%Y")
+
+# Merge data
+Masterfile2 <- left_join(Masterfile, MMfile, by = "Date", suffix = c("_master", "_mm"))
+# Replace values in the master columns with MMfile values where they exist
+for (col in grep("_master$", names(Masterfile2), value = TRUE)) {
+  mm_col <- sub("_master$", "_mm", col)
+  Masterfile2[[col]] <- ifelse(!is.na(Masterfile2[[mm_col]]), Masterfile2[[mm_col]], Masterfile2[[col]])
+}
+Masterfile2 <- Masterfile2 %>%
+  select(-ends_with("_mm"))
+colnames(Masterfile2) <- headings
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype, " 598MM Messages ", settype, " - Temporary.xlsx")
+
+writexl::write_xlsx(Masterfile2, outputfile)
+#===================================================================598=====================================================================================
+
+
+
+
+#===================================================================596=====================================================================================
+# read in relevant MM csv files
+csvfile <- list.files(paste0("X:\\GeneralAccounts\\Settlement\\SEMODownloads\\", receiveddate), pattern = ".csv", full.names = TRUE)
+csvfile <- csvfile[grepl(x = csvfile, pattern = paste0("_", mm, "_"))]
+
+# Get all of the Master file up until current settlement week
+Masterfile <- read_excel(path = Masterfilepath, sheet = 3, col_types = col_types, skip = 1)
+
+colnames(Masterfile) <- headings
+
+# Get Market Message csv file
+MMfile <- read.csv(csvfile[grepl(x = csvfile, pattern = "LCCPowerROILimited_596")], skip = lineskipper)
+
+for (name in cols_to_remove) {
+  if (name %in% colnames(MMfile)) {
+    MMfile[[name]] <- NULL
+  }
+}
+
+MMfile$Date <- as.POSIXct(MMfile$Date, format = "%d/%m/%Y")
+
+# Merge data
+Masterfile2 <- left_join(Masterfile, MMfile, by = "Date", suffix = c("_master", "_mm"))
+# Replace values in the master columns with MMfile values where they exist
+for (col in grep("_master$", names(Masterfile2), value = TRUE)) {
+  mm_col <- sub("_master$", "_mm", col)
+  Masterfile2[[col]] <- ifelse(!is.na(Masterfile2[[mm_col]]), Masterfile2[[mm_col]], Masterfile2[[col]])
+}
+Masterfile2 <- Masterfile2 %>%
+  select(-ends_with("_mm"))
+colnames(Masterfile2) <- headings
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype, " 596MM Messages ", settype, " - Temporary.xlsx")
+
+writexl::write_xlsx(Masterfile2, outputfile)
+#===================================================================596=====================================================================================
+
+
+
+
+# Housekeeping
+suppressWarnings(rm(col, cols_to_remove, col_types, csvfile, f, file, i, j, Masterfilepath, mm_col, MMfilepath, my598, temp, unique_dates))
+
+# Combine MM into a Master file
+inputfiles <-list.files(paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM"), full.names = TRUE, pattern = "59.*\\.xlsx$")
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype, " MASTER MM Messages ", settype, " - Updated.xlsx")
+
+indexrow <- c(0:51) %>% data.frame() %>% t()
+colnames(indexrow) <- headings
+
+data1 <- read_excel(inputfiles[1], sheet = 1)
+data2 <- read_excel(inputfiles[2], sheet = 1)
+data3 <- read_excel(inputfiles[3], sheet = 1)
+data4 <- read_excel(inputfiles[4], sheet = 1)
+  
+mywb <- openxlsx::write.xlsx(list('MM591 LA' = data1, 'MM595 LA' = data2, 'MM596' = data3, 'MM598' = data4), file = outputfile)
+
+delete <- list.files(path = paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM"), full.names = TRUE)
+delete <- delete[grepl(x = delete, pattern = "ESB 59")]
+for (file in delete) {
+  file.remove(file)
+}
+rm(delete)
+
+saveWorkbook(mywb, outputfile, overwrite = TRUE)
+
+```
