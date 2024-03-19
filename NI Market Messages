@@ -1,0 +1,61 @@
+```{r D4 Market Messages}
+
+MMtype <- "NIE"
+MMtype2 <- "NI"
+
+# ----------------------------------------------------------------------------------- MASTER FILE FOR MMS - SETUP -----------------------------------------------------------------------------------
+
+# read in relevant MM csv files
+
+receiveddate2 <- as.Date(receiveddate, format = "%Y%m%d") %>% format("%d%m%Y")
+
+csvfile <- list.files(paste0("X:/GeneralAccounts/Settlement/SEMODownloads/", receiveddate), full.names = TRUE)
+csvfile <- csvfile[grepl(x = csvfile, pattern = paste0("*LCCPowerLimited_\\d{3}LA_", mm, "_\\d{8}-\\d{8}"))]
+if (length(csvfile) < 1) {
+  stop("No D+4 Market Messages found. Stopping...")
+}
+
+Masterfilepath <- paste0("X:/GeneralAccounts/Settlement/", MMtype, " MM/", settype2, " ", mm, " MM/", list.files(paste0("X:/GeneralAccounts/Settlement/", MMtype, " MM/", settype2, " ", mm, " MM"), pattern = "Copy.xlsx"))
+
+if (length(Masterfilepath) > 1) {
+  stop("Close file before continuing. Stopping...")
+} else if (grepl(x = Masterfilepath, pattern = ".xlsx") == FALSE) {
+  stop("No MM Master file found. Stopping...")
+}
+
+
+
+#===================================================================591=====================================================================================
+
+# Get all of the Master file up until current settlement week
+Masterfile <- read.xlsx(xlsxFile = Masterfilepath, sheet = 1, startRow = 2, colNames = FALSE)[,1:52]
+Masterfile$X1 <- as.Date(as.numeric(Masterfile$X1), origin = "1899-12-30") %>% format("%d/%m/%Y")
+
+# Get Market Message file from SEMODownloads
+MMfile <- read.csv(csvfile[grepl(x = csvfile, pattern = "591")], header = FALSE)[,c(1,4:53)]
+
+# Add Month column to MMfile
+temp <- format(as.Date(MMfile$V1, "%d/%m/%Y"), "%b%y")
+temp1 <- MMfile[,1]
+temp2 <- MMfile[,2:ncol(MMfile)]
+MMfile <- cbind(temp1, temp, temp2)
+colnames(MMfile) <- colnames(Masterfile)
+
+col_types <- c("date", "text", rep("numeric", 50))
+#headings <- c("Date", "Month", "HH1","HH2","HH3","H4","HH5","HH6","HH7","HH8","HH9","HH10","HH11","HH12","HH13","HH14","HH15","HH16","HH17","HH18","HH19","HH20","HH21","HH22","HH23","HH24","HH25","HH26","HH27","HH28","HH29","HH30","HH31","HH32","HH33","HH34","HH35","HH36","HH37","HH38","HH39","HH40","HH41","HH42","HH43","HH44","HH45","HH46","HH47","HH48","HH49","HH50")
+Masterfile$X1 <- as.POSIXct(Masterfile$X1, format = "%d/%m/%Y") %>% format("%d/%m/%Y")
+colnames(Masterfile[1:ncol(MMfile)]) <- header
+# Merge data
+Masterfile2 <- left_join(Masterfile, MMfile, by = "Date", suffix = c("_master", "_mm"))
+# Replace values in the master columns with MMfile values where they exist
+for (col in grep("_master$", names(Masterfile2), value = TRUE)) {
+  mm_col <- sub("_master$", "_mm", col)
+  Masterfile2[[col]] <- ifelse(!is.na(Masterfile2[[mm_col]]), Masterfile2[[mm_col]], Masterfile2[[col]])
+}
+Masterfile2 <- Masterfile2 %>%
+  select(-ends_with("_mm"))
+colnames(Masterfile2) <- headings
+outputfile <- paste0("X:\\GeneralAccounts\\Settlement\\", MMtype, " MM\\", settype2, " ", mm, " MM\\", MMtype2, " 591MM Messages ", settype, " - Temporary.xlsx")
+writexl::write_xlsx(Masterfile2, outputfile)
+#===================================================================591=====================================================================================
+```
